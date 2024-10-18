@@ -550,14 +550,16 @@ fn find_intersection_no_collinear(
         let f2 = imp2.evaluate(point);
         let df2 = imp2.gradient(point).dot(curve1.derivative(t));
 
+        // dbg!(f2);
         if f2.signum() != last_f2.signum() {
             eprintln!("refining interrsection:");
-            dbg!(t, f2, df2);
+            // dbg!(t, f2, df2);
             // We've crossed an intersection, use Newton's to refine it
             if let Some((refined_t, refined_point)) =
                 newton_refine_intersection(curve1, imp2, t - step, t)
             {
-                dbg!(refined_t, refined_point);
+                let mapped_t = min_t.lerp(max_t, refined_t).x;
+                dbg!(mapped_t /*, refined_point*/);
                 if let Some(t2) = dbg!(curve2.point_to_parameter_numerical(refined_point, 1e-7)) {
                     // if let Some(t2) = dbg!(curve2.point_to_parameter(refined_point)) {
                     intersections.push((refined_point, map_t(refined_t, t2)));
@@ -579,7 +581,9 @@ fn find_intersection_no_collinear(
                 // Check if this extremum is actually an intersection
                 let extremum_f2 = imp2.evaluate(refined_point);
                 if extremum_f2.abs() < 1e-8 {
-                    if let Some(t2) = curve2.point_to_parameter(refined_point) {
+                    if let Some(t2) = dbg!(curve2.point_to_parameter_numerical(refined_point, 1e-7))
+                    {
+                        // if let Some(t2) = curve2.point_to_parameter(refined_point) {
                         intersections.push((refined_point, map_t(refined_t, t2)));
                     }
                 }
@@ -609,10 +613,10 @@ fn find_intersection_no_collinear(
 fn newton_refine_intersection(
     curve: &CubicBezier,
     implicit: &ImplicitCubic,
-    mut t_start: f64,
-    mut t_end: f64,
+    t_start: f64,
+    t_end: f64,
 ) -> Option<(f64, DVec2)> {
-    dbg!(t_start, t_end);
+    // dbg!(t_start, t_end);
     let mut t = (t_start + t_end) / 2.0;
     for _ in 0..100 {
         // Max iterations
@@ -652,12 +656,13 @@ fn newton_refine_intersection(
 fn newton_refine_extremum(
     curve: &CubicBezier,
     implicit: &ImplicitCubic,
-    mut t_start: f64,
-    mut t_end: f64,
+    t_start: f64,
+    t_end: f64,
 ) -> Option<(f64, DVec2)> {
-    for _ in 0..10 {
+    let mut t = (t_start + t_end) / 2.0;
+    for _ in 0..100 {
         // Max iterations
-        let t = (t_start + t_end) / 2.0;
+        // let t = (t_start + t_end) / 2.0;
         let point = curve.evaluate(t);
         let df = implicit.gradient(point).dot(curve.derivative(t));
         let d2f = implicit.gradient(point).dot(curve.second_derivative(t))
@@ -672,20 +677,22 @@ fn newton_refine_extremum(
         }
 
         if d2f.abs() < 1e-8 {
+            eprintln!("Found inflection point");
             return None; // Inflection point or degenerate case
         }
 
-        let t_new = t - df / d2f;
+        t -= df / d2f;
 
-        if t_new < t_start || t_new > t_end {
+        if t < t_start || t > t_end {
+            eprintln!("leaving interval {t}");
             return None; // New t is outside the interval
         }
 
-        if df > 0.0 {
-            t_end = t;
-        } else {
-            t_start = t;
-        }
+        // if df > 0.0 {
+        //     t_end = t;
+        // } else {
+        //     t_start = t;
+        // }
     }
     None // Did not converge
 }
@@ -1015,6 +1022,9 @@ mod tests {
                 .map(|vec: Vec<_>| DVec2::new(vec[0], vec[1]))
                 .collect();
 
+            // if test_number != 1187 {
+            //     continue;
+            // }
             // Find intersections
             let Some(found_intersections) = find_intersections(&curve1, &curve2) else {
                 colinear += 1;
